@@ -9,9 +9,12 @@ public class App {
 
   public static void main(String[] args) {
 
-    List<Contributor> contributors = Github.connect().
-        contributors("falenn","k8sPlayground");
-    System.out.println("Contributors: " + contributors.toString());
+    List<Contributor> contributors = Github.connect().contributors("falenn","k8sPlayground");
+
+    for (Contributor contributor : contributors) {
+      System.out.println(contributor.displayString());
+    }
+
   }
 
 }
