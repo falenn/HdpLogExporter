@@ -34,7 +34,7 @@ import net.jazdw.rql.parser.ASTVisitor;
 /**
  * @author Jared Wiltshire
  */
-public class HttpRequestHeaderFilter<T> implements ASTVisitor<List<T>, List<T>> {
+public class ListFilter<T> implements ASTVisitor<List<T>, List<T>> {
   /* (non-Javadoc)
    * @see net.jazdw.rql.parser.ASTVisitor#visit(net.jazdw.rql.parser.ASTNode, java.lang.Object)
    */
