@@ -40,7 +40,7 @@ public class RQLPerformanceHeaderListTest {
     ASTNode node = parser.parse(queryString);
 
     ExecutorService executor = Executors.newFixedThreadPool(5);
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < 10000; i++) {
       Runnable worker = new fixedMatcherTask(5,
           node,
           new HeaderFilter<Entry>(),
@@ -76,8 +76,7 @@ public class RQLPerformanceHeaderListTest {
   }
 
   public static void analyzeTiming() {
-    for (Measurement m : profiler.getMetrics()) {
-      System.out.println(m);
-    }
+    profiler.generateReport();
+    profiler.generateDat();
   }
 }
