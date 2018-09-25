@@ -1,6 +1,8 @@
 package org.talents.preformance;
 
 import com.google.auto.value.AutoValue;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 
 @AutoValue
@@ -14,12 +16,16 @@ public abstract class Measurement {
     return new org.talents.preformance.AutoValue_Measurement(startTime, endTime);
   }
 
-  public long delta() {
-    return endTime().compareTo(startTime());
+  /**
+   * Compute the difference between the two measurement times, preserving accuracy.
+   * @return
+   */
+  public long durationInNanos() {
+    return Duration.between(startTime(), endTime()).toNanos();
   }
 
   public String toString() {
-    return "{ startTime: " + startTime() + ", endTime: " + endTime() + ", delta: " + delta() + "}";
+    return "{ startTime: " + startTime() + ", endTime: " + endTime() + ", delta: " + durationInNanos() + "}";
   }
 
 }

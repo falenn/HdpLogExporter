@@ -4,6 +4,8 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.PrintWriter;
 import java.rmi.server.ExportException;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -11,9 +13,10 @@ import java.util.List;
 
 public class Profiler {
 
-  public String filename = "output.dat";
+
 
   protected List<Measurement> metrics = null;
+  protected Clock clock = null;
 
   public static Profiler create() {
     return new Profiler();
@@ -21,6 +24,7 @@ public class Profiler {
 
   private Profiler() {
     metrics = new ArrayList<Measurement>();
+    clock = new NanoClock();
   }
 
   public void addMetric(Measurement m) {
@@ -31,7 +35,11 @@ public class Profiler {
     return metrics;
   }
 
-
+  public Clock getClock() {
+    if(this.clock == null)
+      this.clock = new NanoClock();
+    return this.clock;
+  }
 
   public static void pause(int seconds) {
     //
@@ -53,92 +61,105 @@ public class Profiler {
     return this.getMetrics().size();
   }
 
-  public double getSumDurationMS(){
+  /**
+   * get sum of all time spent.  This is a summation of the "delta" fields in the Measurement objects
+   * (StopTime - StartTime). Units are NS (NanoSeconds)
+   * @return
+   */
+  public double getSumDuration(){
     double total = 0.0d;
     Iterator<Measurement> i = getMetrics().iterator();
     while(((Iterator) i).hasNext()) {
       Measurement m = i.next();
-      total += m.delta();
+      total += m.durationInNanos();
     }
-    return total/1000;
+    return total;
   }
 
-  public double getAvgDurationMS(){
-    double total = 0.0d;
+  /**
+   * Average of all Measurement.delta().  Units in NanoSeconds.
+   * @return
+   */
+  public double getAvgDuration(){
+    long total = 0;
     Iterator<Measurement> i = getMetrics().iterator();
     while(((Iterator) i).hasNext()) {
         Measurement m = i.next();
-        total += m.delta();
+        total += m.durationInNanos();
     }
-    return total/this.getCount()/1000;
-  }
-
-  public long getLongestDurationMS() {
-    this.getMetrics().sort((Measurement o1, Measurement o2)->Long.compare(o2.delta(),o1.delta()));
-    return ((Measurement) this.getMetrics().get(0)).delta()/1000;
+    return total/this.getCount();
   }
 
   public Measurement dropLongestDuration() {
-    this.getMetrics().sort((Measurement o1, Measurement o2)->Long.compare(o2.delta(),o1.delta()));
-    return this.getMetrics().remove(0);
+    this.sotByDuration();
+    return this.getMetrics().remove(this.metrics.size()-1);
   }
 
-  public long getShorestDurationMS() {
-    this.getMetrics().sort((Measurement o1, Measurement o2)->Long.compare(o1.delta(),o2.delta()));
-    return ((Measurement) this.getMetrics().get(0)).delta()/1000;
+  public long getShortestDuration() {
+    this.sotByDuration();
+    return ((Measurement) this.getMetrics().get(0)).durationInNanos();
+  }
+
+  public long getLongestDuration() {
+    this.sotByDuration();
+    return ((Measurement) this.getMetrics().get(this.getMetrics().size()-1)).durationInNanos();
   }
 
   public Measurement dropShortestDuration() {
-    this.getMetrics().sort((Measurement o1, Measurement o2)->Long.compare(o1.delta(),o2.delta()));
+    this.sortByStartTime();
     return this.getMetrics().remove(0);
   }
 
-  public void sortByStartTime() {
-    this.getMetrics().sort((Measurement o1, Measurement o2)-> Long.compare(o1.startTime().toEpochMilli(),o2.startTime().toEpochMilli()));
+  public void sotByDuration() {
+    this.getMetrics().sort((Measurement o1, Measurement o2)-> Long.compare(o1.durationInNanos(),o2.durationInNanos()));
   }
 
-  public double getMeanDurationMS (){
+  public void sortByStartTime() {
+    this.getMetrics().sort((Measurement o1, Measurement o2)-> o1.startTime().compareTo(o2.startTime()));
+  }
+
+  public double getMeanDuration (){
     double mean = 0;
-    mean = this.getSumDurationMS() / (this.getMetrics().size() * 1.0);
+    mean = this.getSumDuration() / (this.getMetrics().size() * 1.0);
     return mean;
   }
 
-  public double medianDurationMS (){
+  public double medianDuration (){
     int middle = this.getMetrics().size()/2;
 
     if (this.getMetrics().size() % 2 == 1) {
-      return ((Measurement) this.getMetrics().get(middle)).delta()/1000;
+      return ((Measurement) this.getMetrics().get(middle)).durationInNanos();
     } else {
-      return (((Measurement) this.getMetrics().get(middle-1)).delta()/1000 +
-              ((Measurement) this.getMetrics().get(middle)).delta()/1000) / 2.0;
+      return (((Measurement) this.getMetrics().get(middle-1)).durationInNanos() +
+              ((Measurement) this.getMetrics().get(middle)).durationInNanos()) / 2.0;
     }
   }
 
-  public double getStandardDeviationDurationMS (){
+  public double getStandardDeviationDuration (){
     int sum = 0;
-    double mean = getMeanDurationMS();
+    double mean = getMeanDuration();
     Iterator<Measurement> i = this.getMetrics().iterator();
     while (i.hasNext()) {
       Measurement m = i.next();
-      sum += Math.pow((m.delta()/1000 - mean), 2);
+      sum += Math.pow((m.durationInNanos() - mean), 2);
     }
     return Math.sqrt( sum / ( this.getMetrics().size() - 1 ) ); // sample
   }
 
-  public double getStandardDeviationDurationMS (int multiple){
+  public double getStandardDeviationDuration (int multiple){
     int sum = 0;
-    double mean = getMeanDurationMS();
+    double mean = getMeanDuration();
     Iterator<Measurement> i = this.getMetrics().iterator();
-    return mean + multiple * getStandardDeviationDurationMS();
+    return mean + multiple * getStandardDeviationDuration();
   }
 
   public void cleanup() {
     List<Measurement> outliers = new ArrayList<Measurement>();
-    double sd2 = getStandardDeviationDurationMS(2);
+    double sd2 = getStandardDeviationDuration(2);
     Iterator<Measurement> i = this.getMetrics().iterator();
     while (i.hasNext()) {
       Measurement m = i.next();
-      if(m.delta()/1000 > sd2)
+      if(m.durationInNanos() > sd2)
         outliers.add(m);
     }
 
@@ -150,36 +171,55 @@ public class Profiler {
     outliers = null;
   }
 
+  public boolean greaterThanSD2(Measurement m) {
+    double sd2 = getStandardDeviationDuration(2);
+    if (Double.compare(sd2, m.durationInNanos()) < 0)
+        return true;
+    return false;
+  }
+
   public void generateReport() {
 
-    System.out.println("Drop fastest and slowest times:" + "\n" +
-        "Longest: " + dropLongestDuration() + "\n" +
-        "Shortest: " + dropShortestDuration());
+    //System.out.println("Drop fastest and slowest times:" + "\n" +
+    //    "Longest: " + dropLongestDuration() + "\n" +
+    //    "Shortest: " + dropShortestDuration());
 
-    cleanup();
+    //cleanup();
+    //cleanup();
+    sortByStartTime();
 
     System.out.println("\n------------ Profiler Report ---------------\n" +
         "Total measurements: " + this.getCount() + "\n" +
-        "Average Time: \t\t\t" + this.getAvgDurationMS() + "ms\n" +
-        "Longest duration: \t" + this.getLongestDurationMS() + "ms\n" +
-        "Shortest duration: \t" + this.getShorestDurationMS() + "ms\n" +
-        "Mean Duration: \t\t" + this.getMeanDurationMS() + "ms\n" +
-        "Standard Dev Dur:\t" + this.getStandardDeviationDurationMS() + "ms");
+        "Average Time: \t\t\t" + this.getAvgDuration()/1000000.0 + " ms\n" +
+        "Longest duration: \t" + this.getLongestDuration()/1000000.0 + " ms\n" +
+        "Shortest duration: \t" + this.getShortestDuration()/1000000.0 + " ms\n" +
+        "Mean Duration: \t\t" + this.getMeanDuration()/1000000.0 + " ms\n" +
+        "Test start time: " + this.getMetrics().get(0).startTime() + "\n" +
+        "Test end time: " + this.getMetrics().get(this.getMetrics().size()-1).endTime() + "\n" +
+        "Total test time: " + Duration.between(
+          this.getMetrics().get(this.getMetrics().size()-1).endTime(),
+          this.getMetrics().get(0).startTime()) + "\n" +
+        "Standard Dev Dur:\t" + this.getStandardDeviationDuration()/1000000.0 + " ms");
   }
 
-  public void generateDat() {
+  public void generateDat(String datFileName) {
     try {
-      cleanup();
+
+      // drop points outside 2 deviations
+
       sortByStartTime();
-      FileWriter fileWriter = new FileWriter(this.filename,false);
+      //cleanup();
+
+      FileWriter fileWriter = new FileWriter(datFileName,false);
       PrintWriter printWriter = new PrintWriter(fileWriter);
-      printWriter.printf("# This file is called   " + filename + "\n");
+      printWriter.printf("# This file is called   " + datFileName + "\n");
       printWriter.printf("# Performance of RQL query on HTTP Headers\n");
       printWriter.printf("# StartTime    EndTime       Duration \n");
       Iterator<Measurement> i = this.getMetrics().iterator();
       while(i.hasNext()) {
         Measurement m = i.next();
-        printWriter.printf("%d\t%d\t%d\n",m.startTime().getNano(), m.endTime().getNano(), m.delta());
+        if(!greaterThanSD2(m))
+          printWriter.printf("%d\t%d\t%d\n",m.startTime().getNano(), m.endTime().getNano(), m.durationInNanos());
       }
       printWriter.close();
     } catch (Exception e) {

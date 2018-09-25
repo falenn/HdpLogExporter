@@ -16,7 +16,7 @@ import org.talents.rql.filters.HeaderFilter;
 import org.talents.rql.model.Entry;
 import org.talents.util.HeaderToList;
 
-public class RQLPerformanceHeaderListTest {
+public class SimplePerformanceHeaderListTest {
 
   protected RQLParser parser = null;
   protected HeaderFilter<Entry> filter = null;
@@ -33,16 +33,15 @@ public class RQLPerformanceHeaderListTest {
     Profiler.pause(5);
 
     // Parse and prepare the query
-    String queryString = "and((Host=like=*.tutsplus.com|Host=like=*.outsiders.com|Host=like=*.friend.com),User-Agent=like=*windows*)";
-
-    RQLParser parser = new RQLParser();
-    ASTNode node = parser.parse(queryString);
+    String header = "Host";
+    String queryString = "*.tutsplus.com";
 
     ExecutorService executor = Executors.newFixedThreadPool(5);
     for (int i = 0; i < 1000000; i++) {
-      Runnable worker = new fixedMatcherTask(5,
-          node,
-          new HeaderFilter<Entry>(),
+      Runnable worker = new simpleHeaderMatcherTask(
+          5,
+          header,
+          queryString,
           HttpRequestGenerator.create().generateRequest());
       executor.execute(worker);
     }
@@ -55,27 +54,28 @@ public class RQLPerformanceHeaderListTest {
 
   }
 
-  class fixedMatcherTask implements Runnable {
-    private ASTNode node = null;
-    private HeaderFilter<Entry> filter = null;
+  class simpleHeaderMatcherTask implements Runnable {
     private HttpServletRequest request = null;
     private int thread;
-    public fixedMatcherTask(int thread, ASTNode node, HeaderFilter<Entry> filter, HttpServletRequest request) {
-      this.node = node;
-      this.filter = filter;
+    private String header = "";
+    private String matchCriteria = "";
+
+    public simpleHeaderMatcherTask(int thread, String header, String matchCriteria, HttpServletRequest request) {
+      this.header = header;
+      this.matchCriteria = matchCriteria;
       this.request = request;
       this.thread = thread;
     }
 
     @Override public void run() {
-      Instant starttime = Instant.now(profiler.getClock());
-      List<Entry> results = node.accept(filter, HeaderToList.convert(request));
-      profiler.addMetric(Measurement.create(starttime, Instant.now(profiler.getClock())));
+      Instant start = Instant.now(profiler.getClock());
+      request.getHeader(this.header).compareToIgnoreCase(this.matchCriteria);
+      profiler.addMetric(Measurement.create(start, Instant.now(profiler.getClock())));
     }
   }
 
   public static void analyzeTiming() {
     profiler.generateReport();
-    profiler.generateDat("RQLHeaderTest.dat");
+    profiler.generateDat("simpleHeaderTest.dat");
   }
 }
