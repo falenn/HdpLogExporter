@@ -68,14 +68,18 @@ public class SimplePerformanceHeaderListTest {
     }
 
     @Override public void run() {
-      Instant start = Instant.now(profiler.getClock());
-      request.getHeader(this.header).compareToIgnoreCase(this.matchCriteria);
-      profiler.addMetric(Measurement.create(start, Instant.now(profiler.getClock())));
+      try {
+        Instant start = Instant.now(profiler.getClock());
+        request.getHeader(this.header).compareToIgnoreCase(this.matchCriteria);
+        profiler.addMetric(Measurement.create(start, Instant.now(profiler.getClock())));
+      } catch (Exception e) {
+        System.out.println("Error with runner: " + e.getMessage());
+      }
     }
   }
 
   public static void analyzeTiming() {
-    profiler.generateReport();
+    System.out.printf(profiler.generateReport());
     profiler.generateDat("simpleHeaderTest.dat");
   }
 }

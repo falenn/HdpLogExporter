@@ -33,7 +33,8 @@ public class RQLPerformanceHeaderListTest {
     Profiler.pause(5);
 
     // Parse and prepare the query
-    String queryString = "and((Host=like=*.tutsplus.com|Host=like=*.outsiders.com|Host=like=*.friend.com),User-Agent=like=*windows*)";
+    //String queryString = "and((Host=like=*.tutsplus.com|Host=like=*.outsiders.com|Host=like=*.friend.com),User-Agent=like=*windows*)";
+    String queryString = "Host=like=*.tutsplus.com";
 
     RQLParser parser = new RQLParser();
     ASTNode node = parser.parse(queryString);
@@ -68,14 +69,18 @@ public class RQLPerformanceHeaderListTest {
     }
 
     @Override public void run() {
-      Instant starttime = Instant.now(profiler.getClock());
-      List<Entry> results = node.accept(filter, HeaderToList.convert(request));
-      profiler.addMetric(Measurement.create(starttime, Instant.now(profiler.getClock())));
+      try {
+        Instant starttime = Instant.now(profiler.getClock());
+        List<Entry> results = node.accept(filter, HeaderToList.convert(request));
+        profiler.addMetric(Measurement.create(starttime, Instant.now(profiler.getClock())));
+      } catch (Exception e) {
+        System.out.println("Error with runner: " + e.getMessage());
+      }
     }
   }
 
-  public static void analyzeTiming() {
-    profiler.generateReport();
+  public void analyzeTiming() {
+    System.out.println(profiler.generateReport());
     profiler.generateDat("RQLHeaderTest.dat");
   }
 }

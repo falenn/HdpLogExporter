@@ -1,8 +1,12 @@
 package org.talents.preformance;
 
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
+import java.io.IOException;
 import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.rmi.server.ExportException;
 import java.time.Clock;
 import java.time.Duration;
@@ -10,6 +14,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.stream.IntStream;
 
 public class Profiler {
 
@@ -17,6 +22,7 @@ public class Profiler {
 
   protected List<Measurement> metrics = null;
   protected Clock clock = null;
+  protected Instant testStartTime;
 
   public static Profiler create() {
     return new Profiler();
@@ -25,6 +31,7 @@ public class Profiler {
   private Profiler() {
     metrics = new ArrayList<Measurement>();
     clock = new NanoClock();
+    testStartTime = Instant.now(clock);
   }
 
   public void addMetric(Measurement m) {
@@ -39,6 +46,10 @@ public class Profiler {
     if(this.clock == null)
       this.clock = new NanoClock();
     return this.clock;
+  }
+
+  public Instant getTestStartTime(){
+    return this.testStartTime;
   }
 
   public static void pause(int seconds) {
@@ -178,7 +189,7 @@ public class Profiler {
     return false;
   }
 
-  public void generateReport() {
+  public String generateReport() {
 
     //System.out.println("Drop fastest and slowest times:" + "\n" +
     //    "Longest: " + dropLongestDuration() + "\n" +
@@ -188,18 +199,18 @@ public class Profiler {
     //cleanup();
     sortByStartTime();
 
-    System.out.println("\n------------ Profiler Report ---------------\n" +
-        "Total measurements: " + this.getCount() + "\n" +
-        "Average Time: \t\t\t" + this.getAvgDuration()/1000000.0 + " ms\n" +
-        "Longest duration: \t" + this.getLongestDuration()/1000000.0 + " ms\n" +
-        "Shortest duration: \t" + this.getShortestDuration()/1000000.0 + " ms\n" +
-        "Mean Duration: \t\t" + this.getMeanDuration()/1000000.0 + " ms\n" +
-        "Test start time: " + this.getMetrics().get(0).startTime() + "\n" +
-        "Test end time: " + this.getMetrics().get(this.getMetrics().size()-1).endTime() + "\n" +
-        "Total test time: " + Duration.between(
+    return "# ------------ Profiler Report ---------------\n" +
+        "# Total measurements: " + this.getCount() + "\n" +
+        "# Average Time: \t\t\t" + this.getAvgDuration()/1000000.0 + " ms\n" +
+        "# Longest duration: \t" + this.getLongestDuration()/1000000.0 + " ms\n" +
+        "# Shortest duration: \t" + this.getShortestDuration()/1000000.0 + " ms\n" +
+        "# Mean Duration: \t\t" + this.getMeanDuration()/1000000.0 + " ms\n" +
+        "# Test start time: " + this.getMetrics().get(0).startTime() + "\n" +
+        "# Test end time: " + this.getMetrics().get(this.getMetrics().size()-1).endTime() + "\n" +
+        "# Total test time: " + Duration.between(
           this.getMetrics().get(this.getMetrics().size()-1).endTime(),
           this.getMetrics().get(0).startTime()) + "\n" +
-        "Standard Dev Dur:\t" + this.getStandardDeviationDuration()/1000000.0 + " ms");
+        "# Standard Dev Dur:\t" + this.getStandardDeviationDuration()/1000000.0 + " ms";
   }
 
   public void generateDat(String datFileName) {
@@ -214,16 +225,29 @@ public class Profiler {
       PrintWriter printWriter = new PrintWriter(fileWriter);
       printWriter.printf("# This file is called   " + datFileName + "\n");
       printWriter.printf("# Performance of RQL query on HTTP Headers\n");
+      printWriter.printf(generateReport());
       printWriter.printf("# StartTime    EndTime       Duration \n");
-      Iterator<Measurement> i = this.getMetrics().iterator();
+      printWriter.close();
+
+      /*Iterator<Measurement> i = this.getMetrics().iterator();
       while(i.hasNext()) {
         Measurement m = i.next();
         if(!greaterThanSD2(m))
           printWriter.printf("%d\t%d\t%d\n",m.startTime().getNano(), m.endTime().getNano(), m.durationInNanos());
-      }
-      printWriter.close();
+      }*/
     } catch (Exception e) {
+      System.out.println("Error writing to file: " + e);
+    }
+    sortByStartTime();
 
+    //Using a streamWriter to write out - this is SERIOUSLY fast.  NIO access to file.
+    try (
+        FileWriter fw = new FileWriter(datFileName, true);
+        BufferedWriter bw = new BufferedWriter(fw);
+        PrintWriter pw = new PrintWriter(bw)) {
+          this.getMetrics().stream().map(Measurement::toDatString).forEach(pw::println);
+    } catch (IOException e) {
+      System.out.println("Error writing to file: " + e);
     }
   }
 }

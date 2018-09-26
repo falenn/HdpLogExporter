@@ -12,6 +12,7 @@ public class MeasurementTest {
   public Measurement measurement = null;
   public Profiler profiler = Profiler.create();
 
+
   @Before
   public void setup() {
 

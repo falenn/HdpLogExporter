@@ -4,7 +4,7 @@ set style line 1 \
 set datafile separator "\t"
 set grid
 set logscale y
-plot "simpleHeaderTest.dat" using 1:2 title 'Duration'
+plot "RQLHeaderTest.dat" using 1:2 title 'RQLDuration', "simpleHeaderTest.dat" using 1:2 title 'SimpleDuration'
 set term png
 set output "DurationTest.png"
 replot

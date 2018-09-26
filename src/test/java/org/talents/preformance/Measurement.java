@@ -24,8 +24,15 @@ public abstract class Measurement {
     return Duration.between(startTime(), endTime()).toNanos();
   }
 
+  public long testStartTimeOffsetInNanos(Instant testStartTime) {
+    return Duration.between(startTime(), testStartTime).toNanos();
+  }
+
   public String toString() {
     return "{ startTime: " + startTime() + ", endTime: " + endTime() + ", delta: " + durationInNanos() + "}";
   }
 
+  public String toDatString() {
+    return (startTime().toEpochMilli() + "." + startTime().getNano() + "\t" + durationInNanos());
+  }
 }
