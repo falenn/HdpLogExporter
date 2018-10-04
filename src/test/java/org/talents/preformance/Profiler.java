@@ -14,6 +14,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.stream.IntStream;
 
 public class Profiler {
@@ -23,22 +26,33 @@ public class Profiler {
   protected List<Measurement> metrics = null;
   protected Clock clock = null;
   protected Instant testStartTime;
+  protected ConcurrentMap<UUID, Measurement> dump;
 
   public static Profiler create() {
     return new Profiler();
   }
 
   private Profiler() {
-    metrics = new ArrayList<Measurement>();
+    this.dump = new ConcurrentHashMap<UUID, Measurement>();
     clock = new NanoClock();
     testStartTime = Instant.now(clock);
   }
 
   public void addMetric(Measurement m) {
-    this.metrics.add(m);
+    this.dump.put(UUID.randomUUID(), m);
   }
 
-  public List<Measurement> getMetrics() {
+
+  public synchronized List<Measurement> getMetrics() {
+    if(this.metrics == null) {
+      this.metrics = new ArrayList<Measurement>();
+      Iterator<Measurement> i = this.dump.values().iterator();
+      while(i.hasNext()) {
+        this.metrics.add(i.next());
+      }
+      this.dump.clear();
+      System.out.println("Metrics count: " + this.metrics.size());
+    }
     return metrics;
   }
 
@@ -50,6 +64,17 @@ public class Profiler {
 
   public Instant getTestStartTime(){
     return this.testStartTime;
+  }
+
+  public Instant getTestEndTime() {
+    List<Measurement> m = this.getMetrics();
+    m.sort((Measurement o1, Measurement o2) ->
+        o1.startTime().compareTo(o2.startTime()));
+    return m.get(m.size()-1).endTime();
+  }
+
+  public Duration getTestDuration() {
+    return Duration.between(this.getTestStartTime(), this.getTestEndTime());
   }
 
   public static void pause(int seconds) {
@@ -79,7 +104,7 @@ public class Profiler {
    */
   public double getSumDuration(){
     double total = 0.0d;
-    Iterator<Measurement> i = getMetrics().iterator();
+    Iterator<Measurement> i = this.getMetrics().iterator();
     while(((Iterator) i).hasNext()) {
       Measurement m = i.next();
       total += m.durationInNanos();
@@ -103,7 +128,7 @@ public class Profiler {
 
   public Measurement dropLongestDuration() {
     this.sotByDuration();
-    return this.getMetrics().remove(this.metrics.size()-1);
+    return this.getMetrics().remove(this.getMetrics().size()-1);
   }
 
   public long getShortestDuration() {
@@ -177,7 +202,7 @@ public class Profiler {
     Iterator<Measurement> j = outliers.iterator();
     while (j.hasNext()) {
       Measurement m = j.next();
-      this.metrics.remove(m);
+      this.getMetrics().remove(m);
     }
     outliers = null;
   }
@@ -191,36 +216,20 @@ public class Profiler {
 
   public String generateReport() {
 
-    //System.out.println("Drop fastest and slowest times:" + "\n" +
-    //    "Longest: " + dropLongestDuration() + "\n" +
-    //    "Shortest: " + dropShortestDuration());
-
-    //cleanup();
-    //cleanup();
-    sortByStartTime();
-
     return "# ------------ Profiler Report ---------------\n" +
         "# Total measurements: " + this.getCount() + "\n" +
         "# Average Time: \t\t\t" + this.getAvgDuration()/1000000.0 + " ms\n" +
         "# Longest duration: \t" + this.getLongestDuration()/1000000.0 + " ms\n" +
         "# Shortest duration: \t" + this.getShortestDuration()/1000000.0 + " ms\n" +
         "# Mean Duration: \t\t" + this.getMeanDuration()/1000000.0 + " ms\n" +
-        "# Test start time: " + this.getMetrics().get(0).startTime() + "\n" +
-        "# Test end time: " + this.getMetrics().get(this.getMetrics().size()-1).endTime() + "\n" +
-        "# Total test time: " + Duration.between(
-          this.getMetrics().get(this.getMetrics().size()-1).endTime(),
-          this.getMetrics().get(0).startTime()) + "\n" +
+        "# Test start time: " + this.getTestEndTime() + "\n" +
+        "# Test end time: " + this.getTestEndTime()+ "\n" +
+        "# Total test time: " + this.getTestDuration() + "\n" +
         "# Standard Dev Dur:\t" + this.getStandardDeviationDuration()/1000000.0 + " ms";
   }
 
   public void generateDat(String datFileName) {
     try {
-
-      // drop points outside 2 deviations
-
-      sortByStartTime();
-      //cleanup();
-
       FileWriter fileWriter = new FileWriter(datFileName,false);
       PrintWriter printWriter = new PrintWriter(fileWriter);
       printWriter.printf("# This file is called   " + datFileName + "\n");
@@ -228,16 +237,10 @@ public class Profiler {
       printWriter.printf(generateReport());
       printWriter.printf("# StartTime    EndTime       Duration \n");
       printWriter.close();
-
-      /*Iterator<Measurement> i = this.getMetrics().iterator();
-      while(i.hasNext()) {
-        Measurement m = i.next();
-        if(!greaterThanSD2(m))
-          printWriter.printf("%d\t%d\t%d\n",m.startTime().getNano(), m.endTime().getNano(), m.durationInNanos());
-      }*/
     } catch (Exception e) {
       System.out.println("Error writing to file: " + e);
     }
+
     sortByStartTime();
 
     //Using a streamWriter to write out - this is SERIOUSLY fast.  NIO access to file.
